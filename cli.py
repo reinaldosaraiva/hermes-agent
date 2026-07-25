@@ -5289,7 +5289,22 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             )
 
             if resolved_provider not in _AGGREGATOR_PROVIDERS:
-                normalized_model = normalize_model_for_provider(current_model, resolved_provider)
+                # Named custom providers (v12 ``providers:`` dict) resolve to
+                # the runtime id "custom", but the model string carries the
+                # CONFIG name as prefix (e.g. "neuralwatt/qwen3.6-35b-fast"
+                # for the "neuralwatt" entry). Normalizing against "custom"
+                # only strips a literal "custom/" prefix, so the config-name
+                # prefix leaked to the API (404 model not found). Recover the
+                # config name from the runtime source ("custom_provider:<name>")
+                # and normalize against it instead.
+                normalize_target = resolved_provider
+                if resolved_provider == "custom":
+                    source = getattr(self, "_provider_source", "") or ""
+                    if source.startswith("custom_provider:"):
+                        config_name = source.split(":", 1)[1].strip()
+                        if config_name:
+                            normalize_target = config_name
+                normalized_model = normalize_model_for_provider(current_model, normalize_target)
                 if normalized_model and normalized_model != current_model:
                     if not self._model_is_default:
                         self._console_print(
